@@ -18,7 +18,7 @@ composer require gadwinn/psr-log
 ### Basic instantiation
 
 The constructor accepts a **minimum log level** and an array of **outputs**.  
-Any level below the threshold is silently discarded.
+Any level below the threshold is silently discarded. Without any output, entries go to the PHP system logger (`LogOutputErrorLog`).
 
 ```php
 use G\Log\Logger;
@@ -74,7 +74,23 @@ Context values are serialized safely regardless of type:
 | `array` | JSON — fallback `[array(n)]` on encoding failure |
 | `Throwable` | `[exception ClassName: message]` |
 | `Stringable` object | result of `__toString()` |
-| Other object | `[object ClassName: <serialized>]` — fallback `[object ClassName]` |
+| `DateTimeInterface` | RFC 3339 date, e.g. `2026-05-18T12:00:00+00:00` |
+| Other object | `[object ClassName]` |
+| Anything else (resource…) | `[type]`, e.g. `[resource]` |
+
+A context value never throws nor raises a PHP error (PSR-3 §1.3).
+
+### Exceptions
+
+Pass the exception in the `exception` context key, as PSR-3 recommends. The built-in outputs append its class, message, location and stack trace after the message:
+
+```php
+try {
+    $payment->charge();
+} catch (Throwable $e) {
+    $logger->error('Payment failed for order {order}.', ['order' => 42, 'exception' => $e]);
+}
+```
 
 ### `LogOutputFile` — built-in file output
 
@@ -157,13 +173,18 @@ use G\Log\Output\LogOutputInterface;
 
 class SyslogOutput implements LogOutputInterface
 {
-    public function writeLog($level, string $message): void
+    public function writeLog($level, string $message, array $context = []): void
     {
         syslog(LOG_INFO, "[$level] $message");
     }
 }
 
 $logger = new Logger(LogLevel::DEBUG, [new SyslogOutput()]);
+```
+
+`$message` is already interpolated; `$context` is the raw PSR-3 context, so an output can store it as structured data or read `$context['exception']`.
+
+```php
 ```
 
 ### Logger-aware classes (`LoggerAwareInterface`)
