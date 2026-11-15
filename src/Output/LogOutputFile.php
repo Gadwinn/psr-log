@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace G\Log\Output;
 
+use Throwable;
+
 class LogOutputFile implements LogOutputInterface
 {
     public function __construct(
@@ -12,8 +14,13 @@ class LogOutputFile implements LogOutputInterface
     ) { //
     }
 
-    public function writeLog($level, string $message): void
+    public function writeLog($level, string $message, array $context = []): void
     {
+        // PSR-3 §1.3: the "exception" key must be checked before being used as an exception.
+        if (($context['exception'] ?? null) instanceof Throwable) {
+            $message .= PHP_EOL . $context['exception'];
+        }
+
         $line = sprintf(
             $this->format,
             date('c'),

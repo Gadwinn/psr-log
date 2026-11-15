@@ -43,6 +43,25 @@ final class LogOutputFileTest extends TestCase
         }
     }
 
+    public function testExceptionFromContextIsAppended(): void
+    {
+        $tmpFile = tempnam(sys_get_temp_dir(), 'log-test-');
+        $this->assertNotFalse($tmpFile);
+
+        try {
+            $output = new LogOutputFile($tmpFile);
+            $output->writeLog(LogLevel::ERROR, 'failed', ['exception' => new \RuntimeException('boom')]);
+            $output->writeLog(LogLevel::ERROR, 'not an exception', ['exception' => 'just a string']);
+
+            $content = (string) file_get_contents($tmpFile);
+            $this->assertStringContainsString('failed' . PHP_EOL . 'RuntimeException: boom', $content);
+            $this->assertStringContainsString('#0 ', $content);
+            $this->assertStringNotContainsString('just a string', $content);
+        } finally {
+            unlink($tmpFile);
+        }
+    }
+
     public function testAppendsMultipleLines(): void
     {
         $tmpFile = tempnam(sys_get_temp_dir(), 'log-test-');

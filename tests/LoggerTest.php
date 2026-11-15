@@ -13,7 +13,7 @@ use ReflectionClass;
 
 final class LoggerTest extends TestCase
 {
-    /** @var list<array{level: string, message: string}> */
+    /** @var list<array{level: string, message: string, context: mixed[]}> */
     private array $captured = [];
 
     protected function setUp(): void
@@ -29,14 +29,14 @@ final class LoggerTest extends TestCase
         $ref = &$this->captured;
 
         return new class ($ref) implements LogOutputInterface {
-            /** @param list<array{level: string, message: string}> $captured */
+            /** @param list<array{level: string, message: string, context: mixed[]}> $captured */
             public function __construct(private array &$captured)
             { //
             }
 
-            public function writeLog($level, string $message): void
+            public function writeLog($level, string $message, array $context = []): void
             {
-                $this->captured[] = ['level' => $level, 'message' => $message];
+                $this->captured[] = ['level' => $level, 'message' => $message, 'context' => $context];
             }
         };
     }
@@ -293,6 +293,63 @@ final class LoggerTest extends TestCase
         $this->assertSame('data={"x":1,"y":2}', $this->captured[0]['message']);
     }
 
+    public function testInterpolationFormatsObjectsAndDates(): void
+    {
+        $logger = new Logger(LogLevel::DEBUG, [$this->createSpy()]);
+        $logger->info('{object} {date} {closure}', [
+            'object' => new \stdClass(),
+            'date' => new \DateTimeImmutable('2026-01-02 03:04:05', new \DateTimeZone('UTC')),
+            'closure' => static fn (): int => 1,
+        ]);
+
+        $this->assertSame(
+            '[object stdClass] 2026-01-02T03:04:05+00:00 [object Closure]',
+            $this->captured[0]['message']
+        );
+    }
+
+    public function testInterpolationFormatsResources(): void
+    {
+        $resource = fopen('php://memory', 'r');
+        $this->assertIsResource($resource);
+
+        $logger = new Logger(LogLevel::DEBUG, [$this->createSpy()]);
+        $logger->info('{r}', ['r' => $resource]);
+        fclose($resource);
+
+        $this->assertSame('[resource]', $this->captured[0]['message']);
+    }
+
+    // -------------------------------------------------------------------------
+    // Outputs
+    // -------------------------------------------------------------------------
+
+    public function testContextIsPassedToOutputs(): void
+    {
+        $exception = new Exception('boom');
+        $logger = new Logger(LogLevel::DEBUG, [$this->createSpy()]);
+        $logger->error('Failed: {reason}', ['reason' => 'x', 'exception' => $exception]);
+
+        $this->assertSame('Failed: x', $this->captured[0]['message']);
+        $this->assertSame(['reason' => 'x', 'exception' => $exception], $this->captured[0]['context']);
+    }
+
+    public function testDefaultOutputIsThePhpSystemLogger(): void
+    {
+        $tmpFile = tempnam(sys_get_temp_dir(), 'log-test-');
+        $this->assertNotFalse($tmpFile);
+        $previousErrorLog = ini_set('error_log', $tmpFile);
+
+        try {
+            (new Logger())->info('default output message');
+
+            $this->assertStringContainsString('default output message', (string) file_get_contents($tmpFile));
+        } finally {
+            ini_set('error_log', (string) $previousErrorLog);
+            unlink($tmpFile);
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Multiple outputs
     // -------------------------------------------------------------------------
@@ -307,9 +364,9 @@ final class LoggerTest extends TestCase
             { //
             }
 
-            public function writeLog($level, string $message): void
+            public function writeLog($level, string $message, array $context = []): void
             {
-                $this->captured[] = ['level' => $level, 'message' => $message];
+                $this->captured[] = ['level' => $level, 'message' => $message, 'context' => $context];
             }
         };
 
