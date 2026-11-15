@@ -184,9 +184,6 @@ $logger = new Logger(LogLevel::DEBUG, [new SyslogOutput()]);
 
 `$message` is already interpolated; `$context` is the raw PSR-3 context, so an output can store it as structured data or read `$context['exception']`.
 
-```php
-```
-
 ### Logger-aware classes (`LoggerAwareInterface`)
 
 Use `Psr\Log\LoggerAwareInterface` with `Psr\Log\LoggerAwareTrait` to inject a logger via setter into any class, without coupling it to a specific implementation.
