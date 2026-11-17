@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace G\Log;
 
-use G\Log\Output\{LogOutputInterface, LogOutputFile};
+use DateTimeInterface;
+use G\Log\Output\{LogOutputErrorLog, LogOutputInterface};
 use Psr\Log\{AbstractLogger, InvalidArgumentException, LogLevel};
-use RuntimeException;
 use Stringable;
 use Throwable;
 
@@ -43,10 +43,9 @@ class Logger extends AbstractLogger
 
     /**
      * @param mixed $level Minimum level to log, one of the LogLevel constants.
-     * @param LogOutputInterface[] $logOutputs
+     * @param LogOutputInterface[] $logOutputs Outputs to write to, the PHP system logger by default.
      *
      * @throws InvalidArgumentException If the level is not a PSR-3 level.
-     * @throws RuntimeException If no output is given and the default temporary file cannot be created.
      */
     public function __construct($level = LogLevel::INFO, array $logOutputs = [])
     {
@@ -56,14 +55,7 @@ class Logger extends AbstractLogger
         }
         $this->levelsEnabled = array_slice(self::LEVELS, $threshold);
 
-        if ($logOutputs === []) {
-            $tmpFile = tempnam(sys_get_temp_dir(), 'log-');
-            if ($tmpFile === false) {
-                throw new RuntimeException('Unable to create a temporary log file.');
-            }
-            $logOutputs[] = new LogOutputFile($tmpFile);
-        }
-        $this->logOutputs = $logOutputs;
+        $this->logOutputs = $logOutputs !== [] ? $logOutputs : [new LogOutputErrorLog()];
     }
 
     /**
@@ -90,7 +82,7 @@ class Logger extends AbstractLogger
         $messageInterpolated = self::interpolate((string) $message, $context);
 
         foreach ($this->logOutputs as $logOutput) {
-            $logOutput->writeLog($level, $messageInterpolated);
+            $logOutput->writeLog($level, $messageInterpolated, $context);
         }
     }
 
@@ -123,12 +115,10 @@ class Logger extends AbstractLogger
                         // PSR-3 §1.3: a context value must never throw.
                         $val = sprintf('[object %s]', get_class($val));
                     }
+                } elseif ($val instanceof DateTimeInterface) {
+                    $val = $val->format(DateTimeInterface::RFC3339);
                 } else {
-                    try {
-                        $val = sprintf('[object %s: %s]', get_class($val), serialize($val));
-                    } catch (Throwable) {
-                        $val = sprintf('[object %s]', get_class($val));
-                    }
+                    $val = sprintf('[object %s]', get_class($val));
                 }
             } elseif (is_array($val)) {
                 $encoded = json_encode($val);
@@ -143,11 +133,7 @@ class Logger extends AbstractLogger
             } elseif (is_scalar($val)) {
                 $val = (string) $val;
             } else {
-                try {
-                    $val = sprintf('[type %s: %s]', gettype($val), serialize($val));
-                } catch (Throwable) {
-                    $val = sprintf('[type %s]', gettype($val));
-                }
+                $val = sprintf('[%s]', gettype($val));
             }
 
             $replace['{' . $key . '}'] = $val;
