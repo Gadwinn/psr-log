@@ -208,3 +208,7 @@ $service->charge(4900);
 
 `$this->logger` is provided by the trait as `?LoggerInterface`, initialized to `null`. Use the [null-safe operator](https://www.php.net/manual/en/language.oop5.nullsafe.php) (`?->`) to guard calls when no logger has been injected.
 
+
+## License
+
+MIT, see [LICENSE](LICENSE).
